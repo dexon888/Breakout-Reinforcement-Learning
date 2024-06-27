@@ -106,14 +106,13 @@ def stack_frames(frames):
 
 # Load the trained model with custom objects
 model_dir = 'trained_models'  # Directory where models are saved
-model_filename = 'dqn_breakout_0.h5'  # Name of the model file
+model_filename = 'dqn_breakout_4.keras'  # Name of the model file
 model_path = os.path.join(model_dir, model_filename)  # Full path to the model
 
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"Model file not found: {model_path}")
 
-custom_objects = {'mse': tf.keras.losses.MeanSquaredError()}
-trained_model = tf.keras.models.load_model(model_filename, custom_objects=custom_objects)
+trained_model = tf.keras.models.load_model(model_path)
 
 # Initialize environment
 env = make_atari('BreakoutNoFrameskip-v4')

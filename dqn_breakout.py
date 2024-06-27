@@ -5,6 +5,7 @@ import tensorflow as tf
 from collections import deque
 import random
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 # Define wrappers
 class MaxAndSkipEnv(gym.Wrapper):
@@ -28,9 +29,9 @@ class MaxAndSkipEnv(gym.Wrapper):
 
     def reset(self, **kwargs):
         self._obs_buffer.clear()
-        obs = self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         self._obs_buffer.append(obs)
-        return obs
+        return obs, info
 
 class FireResetEnv(gym.Wrapper):
     def __init__(self, env=None):
@@ -38,14 +39,14 @@ class FireResetEnv(gym.Wrapper):
         assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
         
     def reset(self, **kwargs):
-        self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         obs, _, done, truncated, _ = self.env.step(1)  # FIRE action to start the game
         if done or truncated:
-            self.env.reset(**kwargs)
+            obs, info = self.env.reset(**kwargs)
         obs, _, done, truncated, _ = self.env.step(2)  # Another FIRE action to ensure the game starts
         if done or truncated:
-            self.env.reset(**kwargs)
-        return obs
+            obs, info = self.env.reset(**kwargs)
+        return obs, info
 
     def step(self, action):
         return self.env.step(action)
@@ -66,15 +67,14 @@ class NoopResetEnv(gym.Wrapper):
         assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
 
     def reset(self, **kwargs):
-        self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         noops = self.override_num_noops if self.override_num_noops is not None else np.random.randint(1, self.noop_max + 1)
         assert noops > 0
-        obs = None
         for _ in range(noops):
             obs, _, done, truncated, _ = self.env.step(self.noop_action)
             if done or truncated:
-                obs = self.env.reset(**kwargs)
-        return obs
+                obs, info = self.env.reset(**kwargs)
+        return obs, info
 
     def step(self, action):
         return self.env.step(action)
@@ -109,14 +109,15 @@ learning_rate = 0.00025
 gamma = 0.99
 epsilon_start = 1.0
 epsilon_end = 0.1
-epsilon_decay = 1000000
-batch_size = 32
-memory_size = 1000000
-update_target_freq = 10000
-num_episodes = 5000
-max_episode_steps = 2000
-eval_interval = 100  
+epsilon_decay = 1000000 
+batch_size = 32 
+memory_size = 1000000  
+update_target_freq = 10000  
+num_episodes = 5000  
+max_episode_steps = 100000  
+eval_interval = 1000  
 eval_episodes = 10
+checkpoint_interval = 100 
 
 # Preprocess frame using NumPy
 def preprocess_frame(frame):
@@ -148,7 +149,8 @@ def build_dqn(input_shape, num_actions):
 # Initialize environment, replay memory, and networks
 env = make_atari('BreakoutNoFrameskip-v4')
 env = wrap_deepmind(env)
-state = preprocess_frame(env.reset())
+state, info = env.reset()
+state = preprocess_frame(state)
 state_stack = deque([state] * 4, maxlen=4)
 
 memory = deque(maxlen=memory_size)
@@ -171,88 +173,68 @@ plt.ylabel('Reward')
 plt.title('Performance of DQN on BreakoutNoFrameskip-v4')
 plt.legend()
 
-batch_size = 16  # Reduced batch size to mitigate memory error
-
 for episode in range(num_episodes):
-    state = preprocess_frame(env.reset())
+    print(f"Starting episode {episode}")
+    state, info = env.reset()
+    state = preprocess_frame(state)
     state_stack = deque([state] * 4, maxlen=4)
     total_reward = 0
-    
+
+    progress_bar = tqdm(total=max_episode_steps, desc=f"Episode {episode}", unit="step")
     for t in range(max_episode_steps):
         if np.random.rand() < epsilon:
             action = env.action_space.sample()
         else:
-            q_values = primary_network.predict(np.expand_dims(stack_frames(state_stack), axis=0))
+            q_values = primary_network.predict(np.expand_dims(stack_frames(state_stack), axis=0), verbose=0)
             action = np.argmax(q_values)
-        
-        next_state, reward, done, truncated, info = env.step(action)  # Updated to unpack info
+
+        next_state, reward, done, truncated, info = env.step(action)
         next_state = preprocess_frame(next_state)
         state_stack.append(next_state)
-        memory.append((stack_frames(state_stack.copy()), action, reward, stack_frames(state_stack), done))
-        
+        memory.append((stack_frames(list(state_stack)), action, reward, stack_frames(list(state_stack)), done))
+
         if len(memory) >= batch_size:
             batch = random.sample(memory, batch_size)
             states, actions, rewards, next_states, dones = zip(*batch)
-            
+
             states = np.array(states)
             next_states = np.array(next_states)
-            q_values_next = target_network.predict(next_states)
+            q_values_next = target_network.predict(next_states, verbose=0)
             targets = rewards + gamma * np.max(q_values_next, axis=1) * (1 - np.array(dones))
-            
-            q_values = primary_network.predict(states)
+
+            q_values = primary_network.predict(states, verbose=0)
             for i, action in enumerate(actions):
                 q_values[i][action] = targets[i]
-            
+
             primary_network.fit(states, q_values, epochs=1, verbose=0)
-        
+
         if t % update_target_freq == 0:
             target_network.set_weights(primary_network.get_weights())
-        
+            print(f"Updated target network at step {t}")
+
         state = next_state
         total_reward += reward
-        
+
         if done or truncated:
+            tqdm.write(f"Episode: {episode}, Step: {t}, Finished with Total Reward: {total_reward}")
             break
-    
+
+        if t % 10 == 0:
+            tqdm.write(f"Episode: {episode}, Step: {t}, Total Reward: {total_reward}, Epsilon: {epsilon}")
+
+        progress_bar.update(1)
+
+    progress_bar.close()
     epsilon = max(epsilon_end, epsilon - (epsilon_start - epsilon_end) / epsilon_decay)
     total_rewards.append(total_reward)
-    
-    # Print training progress and evaluate
-    if episode % eval_interval == 0:
-        avg_reward = np.mean(total_rewards[-eval_interval:])
-        print(f"Episode: {episode}, Average Reward (last {eval_interval} episodes): {avg_reward}, Epsilon: {epsilon}")
-        
-        # Evaluation
-        eval_rewards = []
-        for eval_episode in range(eval_episodes):
-            state = preprocess_frame(env.reset())
-            state_stack = deque([state] * 4, maxlen=4)
-            eval_total_reward = 0
-            
-            while True:
-                q_values = primary_network.predict(np.expand_dims(stack_frames(state_stack), axis=0))
-                action = np.argmax(q_values)
-                
-                next_state, reward, done, truncated, info = env.step(action)  # Updated to unpack info
-                next_state = preprocess_frame(next_state)
-                state_stack.append(next_state)
-                
-                eval_total_reward += reward
-                state = next_state
-                
-                if done or truncated:
-                    break
-            
-            eval_rewards.append(eval_total_reward)
-        
-        avg_eval_reward = np.mean(eval_rewards)
-        avg_eval_rewards.append(avg_eval_reward)
-        episodes.append(episode)
-        print(f"Evaluation: Average Reward over {eval_episodes} episodes: {avg_eval_reward}")
-    
-    if episode % 100 == 0:
-        model_path = os.path.join(model_save_dir, f"dqn_breakout_{episode}.h5")
+    print(f"Episode {episode} finished with total reward: {total_reward}")
+
+
+    if episode % checkpoint_interval == 0:
+        model_path = os.path.join(model_save_dir, f"dqn_breakout_{episode}.keras")
+        tqdm.write(f"Saving model checkpoint at episode {episode} to {model_path}")
         primary_network.save(model_path)
+        tqdm.write(f"Model checkpoint at episode {episode} saved successfully")
 
     # Update the plot
     line1.set_xdata(np.arange(len(total_rewards)))
@@ -264,6 +246,7 @@ for episode in range(num_episodes):
     fig.canvas.draw()
     fig.canvas.flush_events()
 
+print("Finished all episodes")
 env.close()
 
 # Final plot update
