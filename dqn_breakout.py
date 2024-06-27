@@ -1,3 +1,4 @@
+import os
 import gymnasium as gym
 import numpy as np
 import tensorflow as tf
@@ -38,10 +39,10 @@ class FireResetEnv(gym.Wrapper):
         
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
-        obs, _, done, truncated, _ = self.env.step(1)
+        obs, _, done, truncated, _ = self.env.step(1)  # FIRE action to start the game
         if done or truncated:
             self.env.reset(**kwargs)
-        obs, _, done, truncated, _ = self.env.step(2)
+        obs, _, done, truncated, _ = self.env.step(2)  # Another FIRE action to ensure the game starts
         if done or truncated:
             self.env.reset(**kwargs)
         return obs
@@ -98,6 +99,11 @@ if len(physical_devices) > 0:
 else:
     print("No GPU detected. Using CPU.")
 
+# Create directory to save models
+model_save_dir = 'trained_models'
+if not os.path.exists(model_save_dir):
+    os.makedirs(model_save_dir)
+
 # Hyperparameters
 learning_rate = 0.00025
 gamma = 0.99
@@ -108,9 +114,9 @@ batch_size = 32
 memory_size = 1000000
 update_target_freq = 10000
 num_episodes = 5000
-max_episode_steps = 2000  # Default maximum number of steps per episode
-eval_interval = 100  # Evaluate every 100 episodes
-eval_episodes = 10  # Number of episodes to run during evaluation
+max_episode_steps = 2000
+eval_interval = 100  
+eval_episodes = 10
 
 # Preprocess frame using NumPy
 def preprocess_frame(frame):
@@ -155,6 +161,17 @@ epsilon = epsilon_start
 total_rewards = []
 avg_eval_rewards = []
 episodes = []
+
+plt.ion()
+fig, ax = plt.subplots()
+line1, = ax.plot([], [], label='Total Reward per Episode')
+line2, = ax.plot([], [], label='Average Evaluation Reward', marker='o')
+plt.xlabel('Episodes')
+plt.ylabel('Reward')
+plt.title('Performance of DQN on BreakoutNoFrameskip-v4')
+plt.legend()
+
+batch_size = 16  # Reduced batch size to mitigate memory error
 
 for episode in range(num_episodes):
     state = preprocess_frame(env.reset())
@@ -234,16 +251,21 @@ for episode in range(num_episodes):
         print(f"Evaluation: Average Reward over {eval_episodes} episodes: {avg_eval_reward}")
     
     if episode % 100 == 0:
-        primary_network.save(f"dqn_breakout_{episode}.h5")
+        model_path = os.path.join(model_save_dir, f"dqn_breakout_{episode}.h5")
+        primary_network.save(model_path)
+
+    # Update the plot
+    line1.set_xdata(np.arange(len(total_rewards)))
+    line1.set_ydata(total_rewards)
+    line2.set_xdata(episodes)
+    line2.set_ydata(avg_eval_rewards)
+    ax.relim()
+    ax.autoscale_view()
+    fig.canvas.draw()
+    fig.canvas.flush_events()
 
 env.close()
 
-# Plotting the performance
-plt.figure(figsize=(12, 6))
-plt.plot(total_rewards, label='Total Reward per Episode')
-plt.plot(episodes, avg_eval_rewards, label='Average Evaluation Reward', marker='o')
-plt.xlabel('Episodes')
-plt.ylabel('Reward')
-plt.title('Performance of DQN on BreakoutNoFrameskip-v4')
-plt.legend()
+# Final plot update
+plt.ioff()
 plt.show()
