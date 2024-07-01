@@ -22,7 +22,7 @@ def add_arguments(parser):
     parser.add_argument('--optimize_interval', type=int,
                         default=4, help='Optimization Interval')
     parser.add_argument('--target_update_interval', type=int,
-                        default=5000, help='How often to update targe network')
+                        default=5000, help='How often to update target network')
     parser.add_argument('--evaluate_interval', type=int,
                         default=10000, help='How often to evaluate')
 
@@ -38,4 +38,17 @@ def add_arguments(parser):
 
     parser.add_argument('--test_n', type=int, default=False,
                         help='The experiment n to save')
+
+    parser.add_argument('--save_interval', type=int, default=100,
+                        help='Interval (in episodes) to save the trained model')
+    
+    parser.add_argument('--model_path', type=str, help='path to the saved model for testing')
+
+    # Add train_dqn and episodes arguments
+    parser.add_argument('--train_dqn', action='store_true', help='whether to train DQN')
+    parser.add_argument('--episodes', type=int, default=1000, help='number of episodes to train')
+
+    # Add log_interval argument
+    parser.add_argument('--log_interval', type=int, default=100, help='Interval (in episodes) for logging progress')
+
     return parser

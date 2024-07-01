@@ -1,44 +1,37 @@
+# environment.py
 import gymnasium as gym
-import numpy as np
-from atari_wrapper import make_wrap_atari
+from atari_wrapper import wrap_deepmind  # Import your wrapper if applicable
 
-
-class Environment(object):
-    def __init__(self, env_name, args, atari_wrapper=False, test=False, render_mode=None):
-        if atari_wrapper:
-            clip_rewards = not test
-            self.env = make_wrap_atari(
-                env_name, clip_rewards, render_mode=render_mode)
-        else:
+class Environment:
+    def __init__(self, env_name, args, atari_wrapper=True, test=False, render_mode=None):
+        if render_mode:
             self.env = gym.make(env_name, render_mode=render_mode)
-
-        self.action_space = self.env.action_space
-        self.observation_space = self.env.observation_space
-
+        else:
+            self.env = gym.make(env_name)
+        self.render_mode = render_mode
+        if atari_wrapper:
+            self.env = wrap_deepmind(self.env, clip_rewards=test)
+    
     def seed(self, seed):
-        '''Control the randomness of the environment'''
-        self.env.seed(seed)
+        self.env.unwrapped.seed(seed)
 
     def reset(self):
-        '''When running dqn: observation: np.array stack 4 last frames, shape: (84, 84, 4)'''
-        observation, info = self.env.reset()  # Ensure reset returns obs and info
-        return np.array(observation), info  # Return obs and info
+        return self.env.reset()
 
     def step(self, action):
-        '''When running dqn: observation: np.array stack 4 last preprocessed frames, shape: (84, 84, 4)
-           reward: int wrapper clips the reward to {-1, 0, 1} by its sign
-           we don't clip the reward when testing done: bool whether reach the end of the episode?'''
-        if not self.env.action_space.contains(action):
-            raise ValueError('Invalid action!!')
+        return self.env.step(action)
 
-        observation, reward, done, truncated, info = self.env.step(action)
-        return np.array(observation), reward, done, truncated, info
+    def render(self):
+        if self.render_mode == 'human':
+            self.env.render()
 
-    def get_action_space(self):
-        return self.action_space
+    def close(self):
+        self.env.close()
 
-    def get_observation_space(self):
-        return self.observation_space
+    @property
+    def observation_space(self):
+        return self.env.observation_space
 
-    def get_random_action(self):
-        return self.action_space.sample()
+    @property
+    def action_space(self):
+        return self.env.action_space
