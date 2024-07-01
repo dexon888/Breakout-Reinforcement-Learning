@@ -17,7 +17,7 @@ class DQNAgent:
         self.gamma = args.gamma  # discount rate
         self.epsilon = args.epsilon_start  # exploration rate
         self.epsilon_min = args.epsilon_end
-        self.epsilon_decay = (args.epsilon_start - args.epsilon_end) / (args.decay_end - args.decay_start)
+        self.epsilon_decay = (args.epsilon_start - args.epsilon_end) / args.decay_end
         self.learning_rate = args.learning_rate
         self.model = self._build_model()
         self.target_model = self._build_model()
@@ -27,15 +27,13 @@ class DQNAgent:
         self.model_save_path = args.path_to_trained_model
         self.log_interval = args.log_interval if hasattr(args, 'log_interval') else 100  # Default logging interval
 
-
     def _build_model(self):
-        input_channels = self.state_shape[2]
         model = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=8, stride=4),
+            nn.Conv2d(in_channels=4, out_channels=32, kernel_size=8, stride=4),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(64 * 7 * 7, 512),
@@ -86,7 +84,7 @@ class DQNAgent:
         self.optimizer.step()
 
         if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+            self.epsilon -= self.epsilon_decay
 
         return loss.item()  # Return the loss value for logging
 
