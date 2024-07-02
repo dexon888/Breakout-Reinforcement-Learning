@@ -1,6 +1,6 @@
 # environment.py
 import gymnasium as gym
-from atari_wrapper import wrap_deepmind  # Import your wrapper if applicable
+from atari_wrapper import wrap_deepmind
 
 class Environment:
     def __init__(self, env_name, args, atari_wrapper=True, test=False, render_mode=None):

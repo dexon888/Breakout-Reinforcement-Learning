@@ -3,8 +3,7 @@ import numpy as np
 from environment import Environment
 import time
 import torch
-from test import test  # Import the test function from test.py
-
+from test import test
 seed = 11037
 
 def parse():
