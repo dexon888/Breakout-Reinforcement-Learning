@@ -2,13 +2,12 @@ import argparse
 import numpy as np
 from environment import Environment
 import time
-from gym.wrappers.monitoring import video_recorder
 from tqdm import tqdm
 import torch
 
 seed = 11037
 
-def test(agent, env, total_episodes=30):
+def test(agent, env, total_episodes=30, record_video=False):
     """
     Test an agent in the given environment.
 
@@ -16,6 +15,7 @@ def test(agent, env, total_episodes=30):
         agent: An agent to test.
         env: An environment to test the agent in.
         total_episodes: The number of episodes to test the agent for.
+        record_video: (bool) whether you need to record video
     """
     rewards = []
     env.seed(seed)
@@ -28,9 +28,18 @@ def test(agent, env, total_episodes=30):
 
         terminated, truncated = False, False
         while not terminated and not truncated:
-            env.render()  # This will render the environment to the screen
+            if record_video:
+                env.render()  # This will render the environment to the screen
             action = agent.act(state)  # Ensure this method matches your agent's action method
-            state, reward, terminated, truncated, _ = env.step(action)
+            step_result = env.step(action)
+            
+            # Handle both 4 and 5 return values from step_result
+            if len(step_result) == 5:
+                state, reward, terminated, truncated, _ = step_result
+            else:
+                state, reward, terminated, _ = step_result
+                truncated = False
+
             episode_reward += reward
             if terminated or truncated:
                 if truncated:
@@ -47,7 +56,22 @@ def test(agent, env, total_episodes=30):
 
     env.close()
 
-
+def parse():
+    """
+    Parse command line arguments and return an `argparse.Namespace` object.
+    """
+    parser = argparse.ArgumentParser(description="Breakout")
+    parser.add_argument('--test_dqn', action='store_true', help='whether to test DQN')
+    parser.add_argument('--render_mode', type=str, choices=['human', 'rgb_array'], default='human', help='render mode')
+    parser.add_argument('--model_path', type=str, help='path to the trained model')
+    parser.add_argument('--episodes', type=int, default=30, help='number of episodes to test')
+    try:
+        from argument import add_arguments
+        parser = add_arguments(parser)
+    except ImportError:
+        pass
+    args = parser.parse_args()
+    return args
 
 def run(args, render_mode=None, record_video=False):
     """
@@ -67,7 +91,7 @@ def run(args, render_mode=None, record_video=False):
     agent = DQNAgent(env, state_shape, action_size, device, args)
     if args.model_path:
         agent.load(args.model_path)
-    test(agent, env, total_episodes=100, record_video=record_video)
+    test(agent, env, total_episodes=args.episodes, record_video=record_video)
 
 
 if __name__ == '__main__':
